@@ -1,36 +1,42 @@
-
 use sea_orm::entity::prelude::*;
 use serde::{Deserialize, Serialize};
+use serde_with::{DisplayFromStr, serde_as};
 
-#[derive(Clone, Debug, Default, PartialEq, Eq, DeriveEntityModel, Deserialize, Serialize)]
+#[serde_as]
+#[derive(Clone, Debug, PartialEq, Eq, DeriveEntityModel, Deserialize, Serialize)]
 #[sea_orm(table_name = "users")]
 pub struct Model {
-    #[serde(alias = "_id", rename = "_id")]
-    #[sea_orm(primary_key, column_type = "Uuid")]
-    pub id: String,
-    #[serde(alias = "createdAt")]
+    #[serde_as(as = "DisplayFromStr")]
+    #[serde(alias = "id", rename = "_id", skip_serializing_if = "Uuid::is_nil")]
+    #[sea_orm(primary_key, auto_increment = false)]
+    pub id: Uuid,
     pub created_at: chrono::DateTime<chrono::Utc>,
     #[sea_orm(unique)]
     pub email: String,
     pub name: String,
     #[serde(skip_serializing_if = "String::is_empty")]
     pub password: String,
+    #[sea_orm(ignore)]
+    pub posts: Vec<super::post::Model>,
 }
 
 impl Model {
-    pub fn set_created_at(&mut self, value: chrono::DateTime<chrono::Utc>) -> &mut Self {
-        self.created_at = value;
-        return self;
-    }
-
-    pub fn set_id(&mut self, value: String) -> &mut Self {
-        self.id = value;
-        return self;
-    }
-
     pub fn set_password(&mut self, value: String) -> &mut Self {
         self.password = value;
         return self;
+    }
+}
+
+impl Default for Model {
+    fn default() -> Self {
+        Self {
+            id: Uuid::now_v7(),
+            created_at: chrono::Utc::now(),
+            email: String::new(),
+            name: String::new(),
+            password: String::new(),
+            posts: Vec::new(),
+        }
     }
 }
 

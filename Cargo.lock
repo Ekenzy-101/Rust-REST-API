@@ -2466,6 +2466,8 @@ dependencies = [
  "sea-orm",
  "serde",
  "serde_json",
+ "serde_with",
+ "uuid",
  "validator",
 ]
 
