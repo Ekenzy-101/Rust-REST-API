@@ -1,0 +1,27 @@
+services:
+  api:
+    build: .
+    restart: always
+    ports:
+      - 5000:5000
+    env_file:
+      - .env
+
+  mongo:
+    image: mongo:8.0
+    restart: always
+    ports:
+      - 27017:27017
+    environment:
+      MONGO_INITDB_ROOT_PASSWORD: ${ROOT_PASSWORD}
+      MONGO_INITDB_ROOT_USERNAME: ${ROOT_USERNAME}
+
+  postgres:
+    image: postgres:17.6
+    restart: always
+    ports:
+      - 5432:5432
+    environment:
+      POSTGRES_PASSWORD: ${ROOT_PASSWORD}
+      POSTGRES_USER: ${ROOT_USERNAME}
+      POSTGRES_DB: ${DATABASE_NAME}
