@@ -10,18 +10,20 @@ pub struct Model {
     #[serde(alias = "id", rename = "_id", skip_serializing_if = "Uuid::is_nil")]
     #[sea_orm(primary_key, auto_increment = false)]
     pub id: Uuid,
+    #[serde(default)]
     pub created_at: chrono::DateTime<chrono::Utc>,
     #[sea_orm(unique)]
     pub email: String,
     pub name: String,
-    #[serde(skip_serializing_if = "String::is_empty")]
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub password: String,
+    #[serde(default)]
     #[sea_orm(ignore)]
     pub posts: Vec<super::post::Model>,
 }
 
 impl Model {
-    pub fn set_password(&mut self, value: String) -> &mut Self {
+    pub fn set_password(mut self, value: String) -> Self {
         self.password = value;
         return self;
     }

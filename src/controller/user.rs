@@ -9,7 +9,9 @@ use serde::Deserialize;
 use serde_json::json;
 use validator::Validate;
 
-use crate::{adapter::Auth, config, entity::user, repository::Repository};
+use crate::{
+    adapter::Auth, config, controller::extract_auth_user, entity::user, repository::Repository,
+};
 
 #[derive(Debug, Validate, Deserialize)]
 struct LoginUserRequest {
@@ -43,7 +45,7 @@ pub async fn login_user(
         return HttpResponseBuilder::new(status).json(value);
     }
 
-    let mut user = result.unwrap();
+    let user = result.unwrap();
     let result = auth.verify_password(&body.password, &user.password);
     if let Err(err) = result {
         return HttpResponse::InternalServerError().json(json!({
@@ -113,7 +115,7 @@ pub async fn register_user(
         }));
     }
 
-    let mut user = result.unwrap();
+    let user = result.unwrap();
     let result = auth.generate_access_token(&user);
     if let Err(err) = result {
         return HttpResponse::InternalServerError().json(json!({
@@ -139,14 +141,7 @@ pub async fn get_auth_user(
     repo: web::Data<dyn Repository>,
     req: HttpRequest,
 ) -> impl Responder {
-    let result = req.cookie(config::ACCESS_TOKEN_COOKIE_NAME);
-    if result.is_none() {
-        return HttpResponse::Unauthorized().json(json!({
-            "message": format!("Cookie '{}' not found", config::ACCESS_TOKEN_COOKIE_NAME),
-        }));
-    }
-
-    let result = auth.verify_access_token(result.unwrap().value().into());
+    let result = extract_auth_user(auth, req);
     if let Err(err) = result {
         return HttpResponse::Unauthorized().json(json!({
             "message": err.to_string(),
@@ -154,7 +149,7 @@ pub async fn get_auth_user(
     }
 
     match repo.get_user_by_id(result.unwrap().id).await {
-        Ok(mut user) => HttpResponse::Ok().json(user.set_password("".to_string())),
+        Ok(user) => HttpResponse::Ok().json(user.set_password("".to_string())),
         Err(err) => {
             let value = json!({"message": err.to_string()});
             let mut status = StatusCode::INTERNAL_SERVER_ERROR;

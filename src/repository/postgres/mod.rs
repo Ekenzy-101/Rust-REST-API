@@ -1,8 +1,9 @@
 use std::sync::Arc;
 
-use anyhow::{Ok, Result, anyhow};
+use anyhow::{Result, anyhow};
 use async_trait::async_trait;
 use sea_orm::{IntoActiveModel, Schema, prelude::*};
+use sea_orm::{QueryOrder, QuerySelect};
 
 use crate::entity::*;
 use crate::repository::*;
@@ -29,7 +30,75 @@ impl Repository for PostgresRepository {
                     .build(schema.if_not_exists()),
             )
             .await?;
+
+        schema =
+            Schema::new(self.client.get_database_backend()).create_table_from_entity(post::Entity);
+        self.client
+            .execute(
+                self.client
+                    .get_database_backend()
+                    .build(schema.if_not_exists()),
+            )
+            .await?;
         Ok(())
+    }
+}
+
+#[async_trait]
+impl PostRepository for PostgresRepository {
+    async fn create_post(&self, post: post::Model) -> Result<post::Model> {
+        let post = post.into_active_model().insert(&self.client).await?;
+        Ok(post)
+    }
+
+    async fn delete_post_by_id(&self, id: Uuid) -> Result<()> {
+        post::Entity::delete_by_id(id).exec(&self.client).await?;
+        Ok(())
+    }
+
+    async fn get_post_by_id(&self, id: Uuid) -> Result<post::Model> {
+        let result = post::Entity::find_by_id(id)
+            .find_also_related(user::Entity)
+            .one(&self.client)
+            .await?;
+        match result {
+            Some((post, Some(user))) => Ok(post.set_user(user.set_password("".into())).clone()),
+            None => Err(anyhow!("Post '{}' not found", &id)),
+            _ => Err(anyhow!("Post '{}' doesn't have user", &id)),
+        }
+    }
+
+    async fn get_posts(&self, filter: post::Pagination) -> Result<Vec<post::Model>> {
+        let mut query = post::Entity::find()
+            .limit(filter.limit)
+            .offset(filter.offset)
+            .order_by_desc(post::Column::Id);
+        if let Some(user_id) = filter.user_id {
+            query = query.filter(post::Column::UserId.eq(user_id));
+        }
+
+        let result = query
+            .find_also_related(user::Entity)
+            .all(&self.client)
+            .await?;
+        let mut posts = vec![];
+        for (mut post, user) in result {
+            if user.is_some() {
+                post = post.set_user(user.unwrap().set_password("".into()));
+                posts.push(post);
+            }
+        }
+
+        Ok(posts)
+    }
+
+    async fn update_post(&self, post: post::Model) -> Result<post::Model> {
+        let post = post
+            .into_active_model()
+            .reset_all()
+            .update(&self.client)
+            .await?;
+        Ok(post)
     }
 }
 

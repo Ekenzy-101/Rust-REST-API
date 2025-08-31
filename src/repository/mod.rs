@@ -18,6 +18,15 @@ mod mongo;
 mod postgres;
 
 #[async_trait]
+pub trait PostRepository {
+    async fn create_post(&self, post: post::Model) -> Result<post::Model>;
+    async fn delete_post_by_id(&self, id: Uuid) -> Result<()>;
+    async fn get_post_by_id(&self, id: Uuid) -> Result<post::Model>;
+    async fn get_posts(&self, query: post::Pagination) -> Result<Vec<post::Model>>;
+    async fn update_post(&self, post: post::Model) -> Result<post::Model>;
+}
+
+#[async_trait]
 pub trait UserRepository {
     async fn create_user(&self, user: user::Model) -> Result<user::Model>;
     async fn get_user_by_email(&self, email: String) -> Result<user::Model>;
@@ -25,7 +34,7 @@ pub trait UserRepository {
 }
 
 #[async_trait]
-pub trait Repository: Send + Sync + UserRepository {
+pub trait Repository: PostRepository + Send + Sync + UserRepository {
     async fn check_health(&self) -> Result<()>;
     async fn init(&self) -> Result<()>;
 }
