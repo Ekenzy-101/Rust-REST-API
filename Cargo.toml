@@ -5,18 +5,17 @@ edition = "2024"
 
 [dependencies]
 actix-web = "4"
-anyhow = "1.0.99"
 argon2 = "0.5.3"
 async-trait = "0.1.89"
 bson = {version = "2.15.0", features = ["chrono-0_4", "uuid-1"]}
 chrono = { version = "0.4.41", features = ["clock", "serde"] }
 env_logger = "0.11.8"
 jsonwebtoken = "9.3.1"
-mongodb = "3.2.5"
-rand = "0.9.0"
+mongodb = "3.3.0"
 sea-orm = { version = "1.1.0", features = [ "sqlx-postgres", "runtime-tokio-rustls", "macros" ] }
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.143"
 serde_with = "3.14.0"
+thiserror = "2.0.16"
 uuid = { version = "1.18.0", features = ["serde", "v4", "v7"] }
 validator = { version = "0.20.0", features = ["derive"] }

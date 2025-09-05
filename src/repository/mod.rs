@@ -2,10 +2,9 @@ use std::sync::Arc;
 
 use crate::{
     config,
-    entity::*,
+    entity::{error::AppError, *},
     repository::{mongo::MongoRepository, postgres::PostgresRepository},
 };
-use anyhow::{Result, anyhow};
 use async_trait::async_trait;
 use mongodb::{
     Client, IndexModel,
@@ -19,27 +18,27 @@ mod postgres;
 
 #[async_trait]
 pub trait PostRepository {
-    async fn create_post(&self, post: post::Model) -> Result<post::Model>;
-    async fn delete_post_by_id(&self, id: Uuid) -> Result<()>;
-    async fn get_post_by_id(&self, id: Uuid) -> Result<post::Model>;
-    async fn get_posts(&self, query: post::Pagination) -> Result<Vec<post::Model>>;
-    async fn update_post(&self, post: post::Model) -> Result<post::Model>;
+    async fn create_post(&self, post: post::Model) -> Result<post::Model, AppError>;
+    async fn delete_post_by_id(&self, id: Uuid) -> Result<(), AppError>;
+    async fn get_post_by_id(&self, id: Uuid) -> Result<post::Model, AppError>;
+    async fn get_posts(&self, query: post::Pagination) -> Result<Vec<post::Model>, AppError>;
+    async fn update_post(&self, post: post::Model) -> Result<post::Model, AppError>;
 }
 
 #[async_trait]
 pub trait UserRepository {
-    async fn create_user(&self, user: user::Model) -> Result<user::Model>;
-    async fn get_user_by_email(&self, email: String) -> Result<user::Model>;
-    async fn get_user_by_id(&self, id: Uuid) -> Result<user::Model>;
+    async fn create_user(&self, user: user::Model) -> Result<user::Model, AppError>;
+    async fn get_user_by_email(&self, email: String) -> Result<user::Model, AppError>;
+    async fn get_user_by_id(&self, id: Uuid) -> Result<user::Model, AppError>;
 }
 
 #[async_trait]
 pub trait Repository: PostRepository + Send + Sync + UserRepository {
-    async fn check_health(&self) -> Result<()>;
-    async fn init(&self) -> Result<()>;
+    async fn check_health(&self) -> Result<(), AppError>;
+    async fn init(&self) -> Result<(), AppError>;
 }
 
-pub async fn new() -> Result<Arc<dyn Repository>> {
+pub async fn new() -> Result<Arc<dyn Repository>, AppError> {
     match config::database_type().as_str() {
         "mongo" => {
             let options = ClientOptions::parse(config::database_url()).await?;
@@ -55,6 +54,9 @@ pub async fn new() -> Result<Arc<dyn Repository>> {
             repo.init().await?;
             Ok(repo)
         }
-        &_ => Err(anyhow!("invalid database type")),
+        other => Err(AppError::Internal {
+            err: format!("Invalid database type {other}"),
+            path: format!("{}:{}:{}", file!(), line!(), column!()),
+        }),
     }
 }

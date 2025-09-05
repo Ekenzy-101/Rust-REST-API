@@ -4,18 +4,26 @@ pub mod controller;
 pub mod entity;
 pub mod repository;
 
+use std::sync::Arc;
+
 use actix_web::{App, HttpServer, middleware::Logger, web};
+
+pub struct AppState {
+    repo: Arc<dyn repository::Repository>,
+    auth: Arc<adapter::Auth>,
+}
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     env_logger::init();
-    let repo = repository::new().await.unwrap();
-    let auth = adapter::Auth::new();
+    let app_data = web::Data::new(AppState {
+        repo: repository::new().await.unwrap(),
+        auth: adapter::Auth::new(),
+    });
 
     HttpServer::new(move || {
         App::new()
-            .app_data(web::Data::from(repo.clone()))
-            .app_data(web::Data::from(auth.clone()))
+            .app_data(app_data.clone())
             .wrap(Logger::default())
             .service(controller::check_health)
             .service(controller::create_post)

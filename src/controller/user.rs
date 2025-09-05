@@ -1,163 +1,105 @@
 use actix_web::{
-    HttpRequest, HttpResponse, HttpResponseBuilder, Responder,
+    HttpRequest, HttpResponse,
     cookie::{Cookie, time::Duration},
-    get,
-    http::StatusCode,
-    post, web,
+    get, post, web,
 };
 use serde::Deserialize;
-use serde_json::json;
 use validator::Validate;
 
 use crate::{
-    adapter::Auth, config, controller::extract_auth_user, entity::user, repository::Repository,
+    AppState, config,
+    entity::{error::AppError, user},
 };
 
 #[derive(Debug, Validate, Deserialize)]
 struct LoginUserRequest {
-    #[validate(email)]
+    #[validate(email(message = "Email must be valid"))]
     email: String,
-    #[validate(length(min = 8))]
+    #[validate(length(min = 8, message = "Password must be at least 8 characters"))]
     password: String,
 }
 
 #[post("/auth/login")]
 
 pub async fn login_user(
-    auth: web::Data<Auth>,
+    state: web::Data<AppState>,
     body: web::Json<LoginUserRequest>,
-    repo: web::Data<dyn Repository>,
-) -> impl Responder {
+) -> Result<HttpResponse, AppError> {
+    let AppState { repo, auth } = state.get_ref();
     if let Err(err) = body.validate() {
-        return HttpResponse::BadRequest().json(json!({
-            "message": err.to_string(),
-        }));
+        return Err(AppError::Validation(err));
     }
 
-    let result = repo.get_user_by_email(body.email.clone()).await;
-    if let Err(err) = result {
-        let value = json!({"message": err.to_string()});
-        let mut status = StatusCode::INTERNAL_SERVER_ERROR;
-        if err.to_string().contains("not found") {
-            status = StatusCode::NOT_FOUND
-        }
+    let user = repo.get_user_by_email(body.email.clone()).await?;
+    auth.verify_password(&body.password, &user.password)?;
+    let token = auth.generate_access_token(&user)?;
 
-        return HttpResponseBuilder::new(status).json(value);
-    }
-
-    let user = result.unwrap();
-    let result = auth.verify_password(&body.password, &user.password);
-    if let Err(err) = result {
-        return HttpResponse::InternalServerError().json(json!({
-            "message": err.to_string(),
-        }));
-    }
-
-    let result = auth.generate_access_token(&user);
-    if let Err(err) = result {
-        return HttpResponse::InternalServerError().json(json!({
-            "message": err.to_string(),
-        }));
-    }
-
-    HttpResponse::Ok()
+    let res = HttpResponse::Ok()
         .cookie(
-            Cookie::build(config::ACCESS_TOKEN_COOKIE_NAME, result.unwrap())
+            Cookie::build(config::ACCESS_TOKEN_COOKIE_NAME, token)
                 .http_only(true)
                 .max_age(Duration::seconds(config::ACCESS_TOKEN_TTL_IN_SECONDS))
                 .path("/")
                 .secure(true)
                 .finish(),
         )
-        .json(user.set_password("".to_string()))
+        .json(user.set_password("".to_string()));
+    Ok(res)
 }
 
 #[derive(Debug, Validate, Deserialize)]
 struct RegisterUserRequest {
-    #[validate(length(min = 1))]
+    #[validate(length(min = 1, message = "Name must not be empty"))]
     name: String,
-    #[validate(email)]
+    #[validate(email(message = "Email must be valid"))]
     email: String,
-    #[validate(length(min = 8))]
+    #[validate(length(min = 8, message = "Password must be at least 8 characters"))]
     password: String,
 }
 
 #[post("/auth/register")]
 
 pub async fn register_user(
-    auth: web::Data<Auth>,
+    state: web::Data<AppState>,
     body: web::Json<RegisterUserRequest>,
-    repo: web::Data<dyn Repository>,
-) -> impl Responder {
+) -> Result<HttpResponse, AppError> {
+    let AppState { repo, auth } = state.get_ref();
     if let Err(err) = body.validate() {
-        return HttpResponse::BadRequest().json(json!({
-            "message": err.to_string(),
-        }));
+        return Err(AppError::Validation(err));
     }
 
-    let result = auth.hash_password(&body.password);
-    if let Err(err) = result {
-        return HttpResponse::InternalServerError().json(json!({
-            "message": err.to_string(),
-        }));
-    }
-
-    let user = user::Model {
+    let password = auth.hash_password(&body.password)?;
+    let mut user = user::Model {
         email: body.email.clone(),
         name: body.name.clone(),
-        password: result.unwrap(),
+        password,
         ..Default::default()
     };
-    let result = repo.create_user(user).await;
-    if let Err(err) = result {
-        return HttpResponse::InternalServerError().json(json!({
-            "message": err.to_string(),
-        }));
-    }
+    user = repo.create_user(user).await?;
+    let token = auth.generate_access_token(&user)?;
 
-    let user = result.unwrap();
-    let result = auth.generate_access_token(&user);
-    if let Err(err) = result {
-        return HttpResponse::InternalServerError().json(json!({
-            "message": err.to_string(),
-        }));
-    }
-
-    HttpResponse::Ok()
+    let res = HttpResponse::Ok()
         .cookie(
-            Cookie::build(config::ACCESS_TOKEN_COOKIE_NAME, result.unwrap())
+            Cookie::build(config::ACCESS_TOKEN_COOKIE_NAME, token)
                 .http_only(true)
                 .max_age(Duration::seconds(config::ACCESS_TOKEN_TTL_IN_SECONDS))
                 .path("/")
                 .secure(true)
                 .finish(),
         )
-        .json(user.set_password("".to_string()))
+        .json(user.set_password("".to_string()));
+    Ok(res)
 }
 
 #[get("/auth/me")]
 pub async fn get_auth_user(
-    auth: web::Data<Auth>,
-    repo: web::Data<dyn Repository>,
+    state: web::Data<AppState>,
     req: HttpRequest,
-) -> impl Responder {
-    let result = extract_auth_user(auth, req);
-    if let Err(err) = result {
-        return HttpResponse::Unauthorized().json(json!({
-            "message": err.to_string(),
-        }));
-    }
+) -> Result<HttpResponse, AppError> {
+    let AppState { repo, auth } = state.get_ref();
+    let mut user = auth.extract_auth_user(req)?;
+    user = repo.get_user_by_id(user.id).await?;
 
-    match repo.get_user_by_id(result.unwrap().id).await {
-        Ok(user) => HttpResponse::Ok().json(user.set_password("".to_string())),
-        Err(err) => {
-            let value = json!({"message": err.to_string()});
-            let mut status = StatusCode::INTERNAL_SERVER_ERROR;
-            if err.to_string().contains("not found") {
-                status = StatusCode::NOT_FOUND
-            }
-
-            return HttpResponseBuilder::new(status).json(value);
-        }
-    }
+    let res = HttpResponse::Ok().json(user.set_password("".to_string()));
+    Ok(res)
 }

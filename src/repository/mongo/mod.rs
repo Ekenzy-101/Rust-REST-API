@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use anyhow::{Result, anyhow};
 use async_trait::async_trait;
 use mongodb::{Client, bson::doc};
 
@@ -15,7 +14,7 @@ pub struct MongoRepository {
 
 #[async_trait]
 impl Repository for MongoRepository {
-    async fn check_health(&self) -> Result<()> {
+    async fn check_health(&self) -> Result<(), AppError> {
         self.client
             .database("admin")
             .run_command(doc! {"ping": 1})
@@ -23,7 +22,7 @@ impl Repository for MongoRepository {
         Ok(())
     }
 
-    async fn init(&self) -> Result<()> {
+    async fn init(&self) -> Result<(), AppError> {
         let options = IndexOptions::builder().unique(true).build();
         let index = IndexModel::builder()
             .keys(doc! { "email": 1 })
@@ -40,7 +39,7 @@ impl Repository for MongoRepository {
 
 #[async_trait]
 impl PostRepository for MongoRepository {
-    async fn create_post(&self, post: post::Model) -> Result<post::Model> {
+    async fn create_post(&self, post: post::Model) -> Result<post::Model, AppError> {
         self.client
             .database(&config::database_name())
             .collection::<post::Model>(config::COLLECTION_POSTS)
@@ -49,7 +48,7 @@ impl PostRepository for MongoRepository {
         Ok(post)
     }
 
-    async fn delete_post_by_id(&self, id: Uuid) -> Result<()> {
+    async fn delete_post_by_id(&self, id: Uuid) -> Result<(), AppError> {
         self.client
             .database(&config::database_name())
             .collection::<post::Model>(config::COLLECTION_POSTS)
@@ -58,7 +57,7 @@ impl PostRepository for MongoRepository {
         Ok(())
     }
 
-    async fn get_post_by_id(&self, id: Uuid) -> Result<post::Model> {
+    async fn get_post_by_id(&self, id: Uuid) -> Result<post::Model, AppError> {
         let pipeline = vec![
             doc! {"$match": {"_id": id.to_string()}},
             doc! {"$lookup": {
@@ -86,10 +85,10 @@ impl PostRepository for MongoRepository {
             return Ok(post);
         }
 
-        Err(anyhow!("Post '{}' not found", id))
+        Err(AppError::NotFound(format!("Post '{id}' not found")))
     }
 
-    async fn get_posts(&self, filter: post::Pagination) -> Result<Vec<post::Model>> {
+    async fn get_posts(&self, filter: post::Pagination) -> Result<Vec<post::Model>, AppError> {
         let mut pipeline = vec![
             doc! {"$sort": {"_id": -1}},
             doc! {"$skip": filter.offset as i64},
@@ -126,7 +125,7 @@ impl PostRepository for MongoRepository {
         Ok(posts)
     }
 
-    async fn update_post(&self, post: post::Model) -> Result<post::Model> {
+    async fn update_post(&self, post: post::Model) -> Result<post::Model, AppError> {
         let update = doc! {
             "$set": {
                 "content": &post.content,
@@ -145,26 +144,16 @@ impl PostRepository for MongoRepository {
 
 #[async_trait]
 impl UserRepository for MongoRepository {
-    async fn create_user(&self, user: user::Model) -> Result<user::Model> {
-        let result = self
-            .client
+    async fn create_user(&self, user: user::Model) -> Result<user::Model, AppError> {
+        self.client
             .database(&config::database_name())
             .collection::<user::Model>(config::COLLECTION_USERS)
             .insert_one(&user)
-            .await;
-
-        match result {
-            Ok(_) => Ok(user),
-            Err(err) => {
-                if err.to_string().contains("11000") {
-                    return Err(anyhow!("User '{}' already exists", &user.email));
-                }
-                Err(err.into())
-            }
-        }
+            .await?;
+        Ok(user)
     }
 
-    async fn get_user_by_email(&self, email: String) -> Result<user::Model> {
+    async fn get_user_by_email(&self, email: String) -> Result<user::Model, AppError> {
         let result = self
             .client
             .database(&config::database_name())
@@ -173,11 +162,11 @@ impl UserRepository for MongoRepository {
             .await?;
         match result {
             Some(user) => Ok(user),
-            None => Err(anyhow!("User '{}' not found", email)),
+            None => Err(AppError::NotFound(format!("User '{email}' not found"))),
         }
     }
 
-    async fn get_user_by_id(&self, id: Uuid) -> Result<user::Model> {
+    async fn get_user_by_id(&self, id: Uuid) -> Result<user::Model, AppError> {
         let result = self
             .client
             .database(&config::database_name())
@@ -186,7 +175,7 @@ impl UserRepository for MongoRepository {
             .await?;
         match result {
             Some(user) => Ok(user),
-            None => Err(anyhow!("User '{}' not found", id)),
+            None => Err(AppError::NotFound(format!("User '{id}' not found"))),
         }
     }
 }

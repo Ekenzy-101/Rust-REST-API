@@ -1,17 +1,11 @@
-
-use actix_web::{get, web, HttpResponse, Responder};
+use actix_web::{HttpResponse, get, web};
 use serde_json::json;
 
-use crate::repository::Repository;
+use crate::{AppState, entity::error::AppError};
 
 #[get("/health")]
-pub async fn check_health(repo: web::Data<dyn Repository>) -> impl Responder {
-    match repo.check_health().await  {
-        Ok(_) => HttpResponse::Ok().json(json!({
-            "status": "ok" 
-        })),
-        Err(err) => HttpResponse::ServiceUnavailable().json(json!({
-            "message": err.to_string(),
-        })),
-    }    
+pub async fn check_health(state: web::Data<AppState>) -> Result<HttpResponse, AppError> {
+    state.repo.check_health().await?;
+    let res = HttpResponse::Ok().json(json!({"status": "ok"}));
+    Ok(res)
 }

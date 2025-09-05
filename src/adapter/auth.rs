@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use anyhow::{Result, anyhow};
+use actix_web::HttpRequest;
 use argon2::{
     Argon2,
     password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString, rand_core::OsRng},
@@ -10,7 +10,10 @@ use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation, deco
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::{config, entity::user};
+use crate::{
+    config,
+    entity::{error::AppError, user},
+};
 
 #[derive(Debug, Clone, Copy)]
 pub struct Auth {}
@@ -20,7 +23,17 @@ impl Auth {
         Arc::new(Auth {})
     }
 
-    pub fn generate_access_token(&self, user: &user::Model) -> Result<String> {
+    pub fn extract_auth_user(&self, req: HttpRequest) -> Result<user::Model, AppError> {
+        let result = req.cookie(config::ACCESS_TOKEN_COOKIE_NAME);
+        if result.is_none() {
+            let msg = format!("Cookie '{}' not found", config::ACCESS_TOKEN_COOKIE_NAME);
+            return Err(AppError::Unauthorized(msg));
+        }
+
+        return self.verify_access_token(result.unwrap().value());
+    }
+
+    pub fn generate_access_token(&self, user: &user::Model) -> Result<String, AppError> {
         let mut header = Header::new(Algorithm::HS256);
         header.kid = Some("primary".to_string());
 
@@ -40,11 +53,14 @@ impl Auth {
         let key = EncodingKey::from_secret(secret.as_bytes());
         match encode(&header, &claims, &key) {
             Ok(token) => Ok(token),
-            Err(err) => Err(anyhow!("{}", err)),
+            Err(err) => Err(AppError::Internal {
+                err: err.to_string(),
+                path: format!("{}:{}:{}", file!(), line!(), column!()),
+            }),
         }
     }
 
-    pub fn verify_access_token(&self, token: &str) -> Result<user::Model> {
+    pub fn verify_access_token(&self, token: &str) -> Result<user::Model, AppError> {
         let secret = config::access_token_secret();
         let key = DecodingKey::from_secret(secret.as_bytes());
 
@@ -59,37 +75,43 @@ impl Auth {
                 name: data.claims.name.clone(),
                 ..Default::default()
             }),
-            Err(err) => Err(anyhow!("{}", err)),
+            Err(err) => Err(AppError::Unauthorized(err.to_string())),
         }
     }
 
-    pub fn hash_password(&self, password: &str) -> Result<String> {
+    pub fn hash_password(&self, password: &str) -> Result<String, AppError> {
         let salt = SaltString::generate(&mut OsRng);
         match Argon2::default().hash_password(password.as_bytes(), &salt) {
             Ok(hash) => Ok(hash.to_string()),
-            Err(err) => Err(anyhow!("{}", err)),
+            Err(err) => Err(AppError::Internal {
+                err: err.to_string(),
+                path: format!("{}:{}:{}", file!(), line!(), column!()),
+            }),
         }
     }
 
-    pub fn verify_password(&self, password: &str, password_hash: &str) -> Result<()> {
+    pub fn verify_password(&self, password: &str, password_hash: &str) -> Result<(), AppError> {
         match PasswordHash::new(password_hash) {
             Ok(hash) => match Argon2::default().verify_password(password.as_bytes(), &hash) {
                 Ok(_) => Ok(()),
-                Err(err) => Err(anyhow!("{}", err)),
+                Err(err) => Err(AppError::Unauthorized(err.to_string())),
             },
-            Err(err) => Err(anyhow!("{}", err)),
+            Err(err) => Err(AppError::Internal {
+                err: err.to_string(),
+                path: format!("{}:{}:{}", file!(), line!(), column!()),
+            }),
         }
     }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 struct Claims {
-    aud: String, // Audience
-    exp: i64,    // Expiration Time (as UTC timestamp seconds)
-    iat: i64,    // Issued At
-    iss: String, // Issuer
-    jti: Uuid,   // JWT ID
-    sub: Uuid,   // Subject (user id)
+    aud: String,
+    exp: i64,
+    iat: i64,
+    iss: String,
+    jti: Uuid,
+    sub: Uuid,
     email: String,
     name: String,
 }

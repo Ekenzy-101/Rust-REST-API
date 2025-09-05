@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use anyhow::{Result, anyhow};
 use async_trait::async_trait;
 use sea_orm::{IntoActiveModel, Schema, prelude::*};
 use sea_orm::{QueryOrder, QuerySelect};
@@ -15,12 +14,12 @@ pub struct PostgresRepository {
 
 #[async_trait]
 impl Repository for PostgresRepository {
-    async fn check_health(&self) -> Result<()> {
+    async fn check_health(&self) -> Result<(), AppError> {
         self.client.ping().await?;
         Ok(())
     }
 
-    async fn init(&self) -> Result<()> {
+    async fn init(&self) -> Result<(), AppError> {
         let mut schema =
             Schema::new(self.client.get_database_backend()).create_table_from_entity(user::Entity);
         self.client
@@ -46,29 +45,29 @@ impl Repository for PostgresRepository {
 
 #[async_trait]
 impl PostRepository for PostgresRepository {
-    async fn create_post(&self, post: post::Model) -> Result<post::Model> {
+    async fn create_post(&self, post: post::Model) -> Result<post::Model, AppError> {
         let post = post.into_active_model().insert(&self.client).await?;
         Ok(post)
     }
 
-    async fn delete_post_by_id(&self, id: Uuid) -> Result<()> {
+    async fn delete_post_by_id(&self, id: Uuid) -> Result<(), AppError> {
         post::Entity::delete_by_id(id).exec(&self.client).await?;
         Ok(())
     }
 
-    async fn get_post_by_id(&self, id: Uuid) -> Result<post::Model> {
+    async fn get_post_by_id(&self, id: Uuid) -> Result<post::Model, AppError> {
         let result = post::Entity::find_by_id(id)
             .find_also_related(user::Entity)
             .one(&self.client)
             .await?;
         match result {
             Some((post, Some(user))) => Ok(post.set_user(user.set_password("".into())).clone()),
-            None => Err(anyhow!("Post '{}' not found", &id)),
-            _ => Err(anyhow!("Post '{}' doesn't have user", &id)),
+            None => Err(AppError::NotFound(format!("Post '{id}' not found"))),
+            _ => Err(AppError::NotFound(format!("Post '{id}' doesn't have user"))),
         }
     }
 
-    async fn get_posts(&self, filter: post::Pagination) -> Result<Vec<post::Model>> {
+    async fn get_posts(&self, filter: post::Pagination) -> Result<Vec<post::Model>, AppError> {
         let mut query = post::Entity::find()
             .limit(filter.limit)
             .offset(filter.offset)
@@ -92,7 +91,7 @@ impl PostRepository for PostgresRepository {
         Ok(posts)
     }
 
-    async fn update_post(&self, post: post::Model) -> Result<post::Model> {
+    async fn update_post(&self, post: post::Model) -> Result<post::Model, AppError> {
         let post = post
             .into_active_model()
             .reset_all()
@@ -104,27 +103,27 @@ impl PostRepository for PostgresRepository {
 
 #[async_trait]
 impl UserRepository for PostgresRepository {
-    async fn create_user(&self, user: user::Model) -> Result<user::Model> {
+    async fn create_user(&self, user: user::Model) -> Result<user::Model, AppError> {
         let user = user.into_active_model().insert(&self.client).await?;
         Ok(user)
     }
 
-    async fn get_user_by_email(&self, email: String) -> Result<user::Model> {
+    async fn get_user_by_email(&self, email: String) -> Result<user::Model, AppError> {
         let result = user::Entity::find()
             .filter(user::Column::Email.eq(&email))
             .one(&self.client)
             .await?;
         match result {
             Some(user) => Ok(user),
-            None => Err(anyhow!("User '{}' not found", &email)),
+            None => Err(AppError::NotFound(format!("User '{email}' not found"))),
         }
     }
 
-    async fn get_user_by_id(&self, id: Uuid) -> Result<user::Model> {
+    async fn get_user_by_id(&self, id: Uuid) -> Result<user::Model, AppError> {
         let result = user::Entity::find_by_id(id).one(&self.client).await?;
         match result {
             Some(user) => Ok(user),
-            None => Err(anyhow!("User '{}' not found", &id)),
+            None => Err(AppError::NotFound(format!("User '{id}' not found"))),
         }
     }
 }
