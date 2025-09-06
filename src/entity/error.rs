@@ -1,4 +1,8 @@
-use actix_web::{HttpResponse, ResponseError, http::StatusCode};
+use actix_web::{HttpResponse, ResponseError, http::StatusCode as ActixStatusCode};
+use axum::{
+    http::StatusCode as AxumStatusCode,
+    response::{IntoResponse, Response},
+};
 use mongodb::error::{ErrorKind, WriteFailure};
 use sea_orm::SqlErr;
 use serde_json::json;
@@ -23,46 +27,91 @@ pub enum AppError {
     Validation(ValidationErrors),
 }
 
-impl ResponseError for AppError {
-    fn error_response(&self) -> HttpResponse {
-        let status: StatusCode;
-        let message: &str;
+impl IntoResponse for AppError {
+    fn into_response(self) -> Response {
         let mut details = json!(null);
+        let status: AxumStatusCode;
+        let message: String;
         match self {
             AppError::Conflict(msg) => {
-                status = StatusCode::CONFLICT;
+                status = AxumStatusCode::CONFLICT;
                 message = msg;
             }
             AppError::Forbidden(msg) => {
-                status = StatusCode::FORBIDDEN;
+                status = AxumStatusCode::FORBIDDEN;
                 message = msg;
             }
             AppError::Internal { err, path } => {
-                status = StatusCode::INTERNAL_SERVER_ERROR;
-                message = "Something went wrong";
-                println!("Err: {err} at path: {path}")
+                status = AxumStatusCode::INTERNAL_SERVER_ERROR;
+                message = "Something went wrong".into();
+                log::error!("Err: {err} at path: {path}");
             }
             AppError::NotFound(msg) => {
-                status = StatusCode::NOT_FOUND;
+                status = AxumStatusCode::NOT_FOUND;
                 message = msg;
             }
             AppError::Unauthorized(msg) => {
-                status = StatusCode::UNAUTHORIZED;
+                status = AxumStatusCode::UNAUTHORIZED;
                 message = msg;
             }
             AppError::Validation(errors) => {
-                status = StatusCode::UNPROCESSABLE_ENTITY;
-                message = "Invalid request payload";
-                details = json!(errors)
+                status = AxumStatusCode::UNPROCESSABLE_ENTITY;
+                message = "Invalid request payload".into();
+                details = json!(errors);
             }
         }
 
-        HttpResponse::build(status).json(json!({
+        let body = json!({
             "code": status.canonical_reason().map_or("UNKNOWN".into(), |s| s.replace(" ", "_").to_uppercase()),
             "message": message,
             "status": status.as_u16(),
             "details": details,
-        }))
+        });
+        (status, axum::Json(body)).into_response()
+    }
+}
+
+impl ResponseError for AppError {
+    fn error_response(&self) -> HttpResponse {
+        let mut details = json!(null);
+        let message: &str;
+        let status: ActixStatusCode;
+        match self {
+            AppError::Conflict(msg) => {
+                message = msg;
+                status = ActixStatusCode::CONFLICT;
+            }
+            AppError::Forbidden(msg) => {
+                message = msg;
+                status = ActixStatusCode::FORBIDDEN;
+            }
+            AppError::Internal { err, path } => {
+                log::error!("Err: {err} at path: {path}");
+                message = "Something went wrong";
+                status = ActixStatusCode::INTERNAL_SERVER_ERROR;
+            }
+            AppError::NotFound(msg) => {
+                message = msg;
+                status = ActixStatusCode::NOT_FOUND;
+            }
+            AppError::Unauthorized(msg) => {
+                message = msg;
+                status = ActixStatusCode::UNAUTHORIZED;
+            }
+            AppError::Validation(errors) => {
+                details = json!(errors);
+                message = "Invalid request payload";
+                status = ActixStatusCode::UNPROCESSABLE_ENTITY;
+            }
+        }
+
+        let body = json!({
+            "code": status.canonical_reason().map_or("UNKNOWN".into(), |s| s.replace(" ", "_").to_uppercase()),
+            "message": message,
+            "status": status.as_u16(),
+            "details": details,
+        });
+        HttpResponse::build(status).json(body)
     }
 }
 

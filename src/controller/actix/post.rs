@@ -24,7 +24,7 @@ pub async fn create_post(
     state: web::Data<AppState>,
 ) -> Result<HttpResponse, AppError> {
     let AppState { repo, auth } = state.get_ref();
-    let user = auth.extract_auth_user(req)?;
+    let user = auth.extract_user_from_actix(req)?;
     if let Err(err) = body.validate() {
         return Err(AppError::Validation(err));
     }
@@ -48,7 +48,7 @@ pub async fn delete_post(
     state: web::Data<AppState>,
 ) -> Result<HttpResponse, AppError> {
     let AppState { repo, auth } = state.get_ref();
-    let user = auth.extract_auth_user(req)?;
+    let user = auth.extract_user_from_actix(req)?;
 
     let post = repo.get_post_by_id(id.into_inner()).await?;
     if post.user.unwrap().id != user.id {
@@ -67,7 +67,7 @@ pub async fn get_posts(
     state: web::Data<AppState>,
 ) -> Result<HttpResponse, AppError> {
     let AppState { repo, auth } = state.get_ref();
-    auth.extract_auth_user(req)?;
+    auth.extract_user_from_actix(req)?;
     if let Err(err) = query.validate() {
         return Err(AppError::Validation(err));
     }
@@ -84,7 +84,7 @@ pub async fn get_post(
     state: web::Data<AppState>,
 ) -> Result<HttpResponse, AppError> {
     let AppState { repo, auth } = state.get_ref();
-    auth.extract_auth_user(req)?;
+    auth.extract_user_from_actix(req)?;
     let post = repo.get_post_by_id(id.into_inner()).await?;
 
     let res = HttpResponse::Ok().json(post);
@@ -107,7 +107,7 @@ pub async fn update_post(
     state: web::Data<AppState>,
 ) -> Result<HttpResponse, AppError> {
     let AppState { repo, auth } = state.get_ref();
-    let user = auth.extract_auth_user(req)?;
+    let user = auth.extract_user_from_actix(req)?;
     if let Err(err) = body.validate() {
         return Err(AppError::Validation(err));
     }

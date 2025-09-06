@@ -1,6 +1,6 @@
 use actix_web::{
     HttpRequest, HttpResponse,
-    cookie::{Cookie, time::Duration},
+    cookie::{Cookie, SameSite, time::Duration},
     get, post, web,
 };
 use serde::Deserialize;
@@ -40,7 +40,8 @@ pub async fn login_user(
                 .http_only(true)
                 .max_age(Duration::seconds(config::ACCESS_TOKEN_TTL_IN_SECONDS))
                 .path("/")
-                .secure(true)
+                .same_site(SameSite::Lax)
+                .secure(config::is_production())
                 .finish(),
         )
         .json(user.set_password("".to_string()));
@@ -78,13 +79,14 @@ pub async fn register_user(
     user = repo.create_user(user).await?;
     let token = auth.generate_access_token(&user)?;
 
-    let res = HttpResponse::Ok()
+    let res = HttpResponse::Created()
         .cookie(
             Cookie::build(config::ACCESS_TOKEN_COOKIE_NAME, token)
                 .http_only(true)
                 .max_age(Duration::seconds(config::ACCESS_TOKEN_TTL_IN_SECONDS))
                 .path("/")
-                .secure(true)
+                .same_site(SameSite::Lax)
+                .secure(config::is_production())
                 .finish(),
         )
         .json(user.set_password("".to_string()));
@@ -97,7 +99,7 @@ pub async fn get_auth_user(
     req: HttpRequest,
 ) -> Result<HttpResponse, AppError> {
     let AppState { repo, auth } = state.get_ref();
-    let mut user = auth.extract_auth_user(req)?;
+    let mut user = auth.extract_user_from_actix(req)?;
     user = repo.get_user_by_id(user.id).await?;
 
     let res = HttpResponse::Ok().json(user.set_password("".to_string()));

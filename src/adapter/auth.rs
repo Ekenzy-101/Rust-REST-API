@@ -5,6 +5,7 @@ use argon2::{
     Argon2,
     password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString, rand_core::OsRng},
 };
+use axum_extra::extract::CookieJar;
 use chrono::{Duration, Utc};
 use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation, decode, encode};
 use serde::{Deserialize, Serialize};
@@ -23,8 +24,18 @@ impl Auth {
         Arc::new(Auth {})
     }
 
-    pub fn extract_auth_user(&self, req: HttpRequest) -> Result<user::Model, AppError> {
+    pub fn extract_user_from_actix(&self, req: HttpRequest) -> Result<user::Model, AppError> {
         let result = req.cookie(config::ACCESS_TOKEN_COOKIE_NAME);
+        if result.is_none() {
+            let msg = format!("Cookie '{}' not found", config::ACCESS_TOKEN_COOKIE_NAME);
+            return Err(AppError::Unauthorized(msg));
+        }
+
+        return self.verify_access_token(result.unwrap().value());
+    }
+
+    pub fn extract_user_from_axum(&self, jar: CookieJar) -> Result<user::Model, AppError> {
+        let result = jar.get(config::ACCESS_TOKEN_COOKIE_NAME);
         if result.is_none() {
             let msg = format!("Cookie '{}' not found", config::ACCESS_TOKEN_COOKIE_NAME);
             return Err(AppError::Unauthorized(msg));
