@@ -22,6 +22,21 @@ impl Repository for MongoRepository {
         Ok(())
     }
 
+    async fn clear(&self) -> Result<(), AppError> {
+        self.client
+            .database(&config::database_name())
+            .collection::<post::Model>(config::COLLECTION_POSTS)
+            .drop()
+            .await?;
+
+        self.client
+            .database(&config::database_name())
+            .collection::<user::Model>(config::COLLECTION_USERS)
+            .drop()
+            .await?;
+        Ok(())
+    }
+
     async fn init(&self) -> Result<(), AppError> {
         let options = IndexOptions::builder().unique(true).build();
         let index = IndexModel::builder()
@@ -151,6 +166,15 @@ impl UserRepository for MongoRepository {
             .insert_one(&user)
             .await?;
         Ok(user)
+    }
+
+    async fn delete_user_by_id(&self, id: Uuid) -> Result<(), AppError> {
+        self.client
+            .database(&config::database_name())
+            .collection::<user::Model>(config::COLLECTION_USERS)
+            .delete_one(doc! {"_id": id.to_string()})
+            .await?;
+        Ok(())
     }
 
     async fn get_user_by_email(&self, email: String) -> Result<user::Model, AppError> {

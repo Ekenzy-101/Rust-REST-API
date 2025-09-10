@@ -14,4 +14,6 @@ start-db:
 stop-db:
 	@docker compose stop $(DATABASE_TYPE)
 
+test:
+	@cargo test -- --test-threads=1
 

@@ -28,6 +28,7 @@ pub trait PostRepository {
 #[async_trait]
 pub trait UserRepository {
     async fn create_user(&self, user: user::Model) -> Result<user::Model, AppError>;
+    async fn delete_user_by_id(&self, id: Uuid) -> Result<(), AppError>;
     async fn get_user_by_email(&self, email: String) -> Result<user::Model, AppError>;
     async fn get_user_by_id(&self, id: Uuid) -> Result<user::Model, AppError>;
 }
@@ -35,6 +36,7 @@ pub trait UserRepository {
 #[async_trait]
 pub trait Repository: PostRepository + Send + Sync + UserRepository {
     async fn check_health(&self) -> Result<(), AppError>;
+    async fn clear(&self) -> Result<(), AppError>;
     async fn init(&self) -> Result<(), AppError>;
 }
 

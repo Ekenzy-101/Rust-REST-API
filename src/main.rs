@@ -3,6 +3,8 @@ pub mod config;
 pub mod controller;
 pub mod entity;
 pub mod repository;
+#[cfg(test)]
+pub mod tests;
 
 use std::sync::Arc;
 

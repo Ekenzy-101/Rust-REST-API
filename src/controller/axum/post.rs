@@ -58,7 +58,7 @@ pub async fn delete_post(
 
     let post = repo.get_post_by_id(id).await?;
     if post.user.unwrap().id != user.id {
-        return Err(AppError::Forbidden("You can't delete this post".into()));
+        return Err(AppError::Forbidden("You can't delete this post".to_string()));
     }
 
     repo.delete_post_by_id(post.id).await?;
@@ -124,7 +124,7 @@ pub async fn update_post(
     };
 
     if post.user.clone().unwrap().id != user.id {
-        return Err(AppError::Forbidden("You can't update this post".into()));
+        return Err(AppError::Forbidden("You can't update this post".to_string()));
     }
 
     post = repo.update_post(post).await?;

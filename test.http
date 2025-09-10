@@ -1,0 +1,58 @@
+@base_url=http://localhost:5000
+
+### Register User
+POST {{base_url}}/auth/register HTTP/1.1
+Content-Type: application/json
+
+{
+    "name": "Test User",
+    "email": "testuser@gmail.com",
+    "password": "testing@123"
+}
+
+
+### Login User
+POST {{base_url}}/auth/login HTTP/1.1
+Content-Type: application/json
+
+{
+    "email": "testuser@gmail.com",
+    "password": "testing@123"
+}
+
+### Get Auth User
+GET {{base_url}}/auth/me HTTP/1.1
+Cookie: access_token={{$dotenv ACCESS_TOKEN}};
+
+### Create Post
+POST {{base_url}}/posts HTTP/1.1
+Content-Type: application/json
+Cookie: access_token={{$dotenv ACCESS_TOKEN}};
+
+{
+    "content": "My first content",
+    "title": "Test Post 1"
+}
+
+### Get Posts
+GET {{base_url}}/posts?offset=0&limit=5 HTTP/1.1
+Cookie: access_token={{$dotenv ACCESS_TOKEN}};
+
+
+### Get Post
+GET {{base_url}}/posts/0198f701-231d-7b80-bb45-6838392f311e HTTP/1.1
+Cookie: access_token={{$dotenv ACCESS_TOKEN}};
+
+### Delete Post
+DELETE {{base_url}}/posts/0198f701-231d-7b80-bb45-6838392f311e HTTP/1.1
+Cookie: access_token={{$dotenv ACCESS_TOKEN}};
+
+### Update Post
+PUT {{base_url}}/posts/0199205f-30bc-7442-9bc9-1505f949e068 HTTP/1.1
+Content-Type: application/json
+Cookie: access_token={{$dotenv ACCESS_TOKEN}};
+
+{
+    "content": "My first updated content",
+    "title": "Test Post 1 Update"
+}

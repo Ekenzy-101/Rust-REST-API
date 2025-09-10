@@ -3,7 +3,7 @@ use actix_web::{
     cookie::{Cookie, SameSite, time::Duration},
     get, post, web,
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use validator::Validate;
 
 use crate::{
@@ -11,12 +11,12 @@ use crate::{
     entity::{error::AppError, user},
 };
 
-#[derive(Debug, Validate, Deserialize)]
-struct LoginUserRequest {
+#[derive(Debug, Deserialize, Serialize, Validate)]
+pub struct LoginUserRequest {
     #[validate(email(message = "Email must be valid"))]
-    email: String,
+    pub email: String,
     #[validate(length(min = 8, message = "Password must be at least 8 characters"))]
-    password: String,
+    pub password: String,
 }
 
 #[post("/auth/login")]
@@ -48,14 +48,14 @@ pub async fn login_user(
     Ok(res)
 }
 
-#[derive(Debug, Validate, Deserialize)]
-struct RegisterUserRequest {
+#[derive(Debug, Deserialize, Serialize, Validate)]
+pub struct RegisterUserRequest {
     #[validate(length(min = 1, message = "Name must not be empty"))]
-    name: String,
+    pub name: String,
     #[validate(email(message = "Email must be valid"))]
-    email: String,
+    pub email: String,
     #[validate(length(min = 8, message = "Password must be at least 8 characters"))]
-    password: String,
+    pub password: String,
 }
 
 #[post("/auth/register")]

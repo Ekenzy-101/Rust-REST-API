@@ -5,9 +5,8 @@ A REST API using the [Clean Architecture by Uncle Bob`](https://blog.cleancoder.
 ## TECH STACK
 
 - Rust
-- MongoDB
-- PostgreSQL
-- Actix (https://actix.rs/), any REST Framework is fine as far you know the concepts of REST API.
+- Databases (MongoDB, PostgreSQL)
+- Framework (Actix, Axum) any REST Framework is fine as far you know the concepts of REST API.
 
 ## SETUP
 

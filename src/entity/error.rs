@@ -5,13 +5,14 @@ use axum::{
 };
 use mongodb::error::{ErrorKind, WriteFailure};
 use sea_orm::SqlErr;
-use serde_json::json;
+use serde::{Deserialize, Serialize};
+use serde_json::{Value, json};
 use thiserror::Error;
 use validator::ValidationErrors;
 
 use crate::config;
 
-#[derive(Error, Debug)]
+#[derive(Clone, Debug, Error)]
 pub enum AppError {
     #[error("Conflict: {0}")]
     Conflict(String),
@@ -25,6 +26,14 @@ pub enum AppError {
     Unauthorized(String),
     #[error("Validation: {0}")]
     Validation(ValidationErrors),
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct AppErrorResponse {
+    pub code: String,
+    pub message: String,
+    pub status: u16,
+    pub details: Value,
 }
 
 impl IntoResponse for AppError {
@@ -43,7 +52,7 @@ impl IntoResponse for AppError {
             }
             AppError::Internal { err, path } => {
                 status = AxumStatusCode::INTERNAL_SERVER_ERROR;
-                message = "Something went wrong".into();
+                message = "Something went wrong".to_string();
                 log::error!("Err: {err} at path: {path}");
             }
             AppError::NotFound(msg) => {
@@ -56,17 +65,21 @@ impl IntoResponse for AppError {
             }
             AppError::Validation(errors) => {
                 status = AxumStatusCode::UNPROCESSABLE_ENTITY;
-                message = "Invalid request payload".into();
+                message = "Invalid request payload".to_string();
                 details = json!(errors);
             }
         }
 
-        let body = json!({
-            "code": status.canonical_reason().map_or("UNKNOWN".into(), |s| s.replace(" ", "_").to_uppercase()),
-            "message": message,
-            "status": status.as_u16(),
-            "details": details,
-        });
+        let body = AppErrorResponse {
+            code: status
+                .canonical_reason()
+                .map_or("UNKNOWN".to_string(), |s| {
+                    s.replace(" ", "_").to_uppercase()
+                }),
+            message,
+            status: status.as_u16(),
+            details,
+        };
         (status, axum::Json(body)).into_response()
     }
 }
@@ -74,43 +87,47 @@ impl IntoResponse for AppError {
 impl ResponseError for AppError {
     fn error_response(&self) -> HttpResponse {
         let mut details = json!(null);
-        let message: &str;
+        let message: String;
         let status: ActixStatusCode;
         match self {
             AppError::Conflict(msg) => {
-                message = msg;
+                message = msg.to_string();
                 status = ActixStatusCode::CONFLICT;
             }
             AppError::Forbidden(msg) => {
-                message = msg;
+                message = msg.to_string();
                 status = ActixStatusCode::FORBIDDEN;
             }
             AppError::Internal { err, path } => {
                 log::error!("Err: {err} at path: {path}");
-                message = "Something went wrong";
+                message = "Something went wrong".to_string();
                 status = ActixStatusCode::INTERNAL_SERVER_ERROR;
             }
             AppError::NotFound(msg) => {
-                message = msg;
+                message = msg.to_string();
                 status = ActixStatusCode::NOT_FOUND;
             }
             AppError::Unauthorized(msg) => {
-                message = msg;
+                message = msg.to_string();
                 status = ActixStatusCode::UNAUTHORIZED;
             }
             AppError::Validation(errors) => {
                 details = json!(errors);
-                message = "Invalid request payload";
+                message = "Invalid request payload".to_string();
                 status = ActixStatusCode::UNPROCESSABLE_ENTITY;
             }
         }
 
-        let body = json!({
-            "code": status.canonical_reason().map_or("UNKNOWN".into(), |s| s.replace(" ", "_").to_uppercase()),
-            "message": message,
-            "status": status.as_u16(),
-            "details": details,
-        });
+        let body = AppErrorResponse {
+            code: status
+                .canonical_reason()
+                .map_or("UNKNOWN".to_string(), |s| {
+                    s.replace(" ", "_").to_uppercase()
+                }),
+            message,
+            status: status.as_u16(),
+            details,
+        };
         HttpResponse::build(status).json(body)
     }
 }
@@ -119,19 +136,8 @@ impl From<mongodb::error::Error> for AppError {
     fn from(err: mongodb::error::Error) -> Self {
         match err.kind.as_ref() {
             ErrorKind::Write(WriteFailure::WriteError(write_err)) => {
-                if let Some(details) = &write_err.details
-                    && write_err.code == 11000
-                    && details
-                        .get_str("ns")
-                        .unwrap()
-                        .contains(config::COLLECTION_USERS)
-                {
-                    let email = details
-                        .get_document("keyValue")
-                        .unwrap()
-                        .get_str("email")
-                        .unwrap();
-                    return AppError::Conflict(format!("User '{email}' already exists"));
+                if write_err.code == 11000 && write_err.message.contains(config::COLLECTION_USERS) {
+                    return AppError::Conflict(format!("User already exists"));
                 }
 
                 AppError::Internal {

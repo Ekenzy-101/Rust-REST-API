@@ -1,8 +1,7 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
-use sea_orm::{IntoActiveModel, Schema, prelude::*};
-use sea_orm::{QueryOrder, QuerySelect};
+use sea_orm::{IntoActiveModel, QueryOrder, QuerySelect, Schema, prelude::*, sea_query::Table};
 
 use crate::entity::*;
 use crate::repository::*;
@@ -19,25 +18,30 @@ impl Repository for PostgresRepository {
         Ok(())
     }
 
-    async fn init(&self) -> Result<(), AppError> {
-        let mut schema =
-            Schema::new(self.client.get_database_backend()).create_table_from_entity(user::Entity);
+    async fn clear(&self) -> Result<(), AppError> {
+        let builder = self.client.get_database_backend();
+        let mut schema = Table::drop();
         self.client
-            .execute(
-                self.client
-                    .get_database_backend()
-                    .build(schema.if_not_exists()),
-            )
+            .execute(builder.build(schema.table(post::Entity).if_exists()))
             .await?;
 
-        schema =
-            Schema::new(self.client.get_database_backend()).create_table_from_entity(post::Entity);
+        schema = Table::drop();
         self.client
-            .execute(
-                self.client
-                    .get_database_backend()
-                    .build(schema.if_not_exists()),
-            )
+            .execute(builder.build(schema.table(user::Entity).if_exists()))
+            .await?;
+        Ok(())
+    }
+
+    async fn init(&self) -> Result<(), AppError> {
+        let builder = self.client.get_database_backend();
+        let mut schema = Schema::new(builder).create_table_from_entity(user::Entity);
+        self.client
+            .execute(builder.build(schema.if_not_exists()))
+            .await?;
+
+        schema = Schema::new(builder).create_table_from_entity(post::Entity);
+        self.client
+            .execute(builder.build(schema.if_not_exists()))
             .await?;
         Ok(())
     }
@@ -61,7 +65,9 @@ impl PostRepository for PostgresRepository {
             .one(&self.client)
             .await?;
         match result {
-            Some((post, Some(user))) => Ok(post.set_user(user.set_password("".into())).clone()),
+            Some((post, Some(user))) => {
+                Ok(post.set_user(user.set_password("".to_string())).clone())
+            }
             None => Err(AppError::NotFound(format!("Post '{id}' not found"))),
             _ => Err(AppError::NotFound(format!("Post '{id}' doesn't have user"))),
         }
@@ -83,7 +89,7 @@ impl PostRepository for PostgresRepository {
         let mut posts = vec![];
         for (mut post, user) in result {
             if user.is_some() {
-                post = post.set_user(user.unwrap().set_password("".into()));
+                post = post.set_user(user.unwrap().set_password("".to_string()));
                 posts.push(post);
             }
         }
@@ -106,6 +112,11 @@ impl UserRepository for PostgresRepository {
     async fn create_user(&self, user: user::Model) -> Result<user::Model, AppError> {
         let user = user.into_active_model().insert(&self.client).await?;
         Ok(user)
+    }
+
+    async fn delete_user_by_id(&self, id: Uuid) -> Result<(), AppError> {
+        user::Entity::delete_by_id(id).exec(&self.client).await?;
+        Ok(())
     }
 
     async fn get_user_by_email(&self, email: String) -> Result<user::Model, AppError> {
