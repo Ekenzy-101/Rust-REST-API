@@ -1,0 +1,25 @@
+# Ignore build artifacts
+/target
+/debug
+
+# Git stuff
+.git
+.gitignore
+
+# Local dev files
+Dockerfile
+.dockerignore
+*.log
+*.env
+
+# IDE/editor junk
+.vscode
+.idea
+*.swp
+*.swo
+*.bak
+
+# Tests/docs not needed in container
+/tests
+/examples
+/docs

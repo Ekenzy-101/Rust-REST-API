@@ -23,7 +23,7 @@ pub async fn main() -> std::io::Result<()> {
     });
 
     HttpServer::new(move || new_app(state.clone()).wrap(Logger::default()))
-        .bind(format!("127.0.0.1:{}", config::port()))?
+        .bind(config::address())?
         .run()
         .await
 }

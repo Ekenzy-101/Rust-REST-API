@@ -9,6 +9,11 @@ pub fn access_token_secret() -> String {
     return env::var("ACCESS_TOKEN_SECRET").unwrap_or(String::new());
 }
 
+pub fn address() -> String {
+    let port = env::var("PORT").unwrap_or(String::from("5000"));
+    format!("0.0.0.0:{}", port)
+}
+
 pub fn database_name() -> String {
     return env::var("DATABASE_NAME").unwrap_or(String::new());
 }
@@ -28,8 +33,4 @@ pub fn framework_type() -> String {
 pub fn is_production() -> bool {
     return env::var("RUST_ENV").unwrap_or(String::from("development"))
         == String::from("production");
-}
-
-pub fn port() -> String {
-    return env::var("PORT").unwrap_or(String::from("5000"));
 }
